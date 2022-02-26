@@ -2,7 +2,7 @@
 
 ![Teaser](/documentation/image/teaser.gif)
 
-<p align="center"><a href="README.md">English</a> | 中文</p>
+
 
 论文 [Robust High-Resolution Video Matting with Temporal Guidance](https://peterl1n.github.io/RobustVideoMatting/) 的官方 GitHub 库。RVM 专为稳定人物视频抠像设计。不同于现有神经网络将每一帧作为单独图片处理，RVM 使用循环神经网络，在处理视频流时有时间记忆。RVM 可在任意视频上做实时高清抠像。在 Nvidia GTX 1080Ti 上实现 **4K 76FPS** 和 **HD 104FPS**。此研究项目来自[字节跳动](https://www.bytedance.com/)。
 
@@ -32,13 +32,13 @@
 
 ## Demo
 * [网页](https://peterl1n.github.io/RobustVideoMatting/#/demo): 在浏览器里看摄像头抠像效果，展示模型内部循环记忆值。
-* [Colab](https://colab.research.google.com/drive/10z-pNKRnVNsp0Lq9tH1J_XPZ7CBC_uHm?usp=sharing): 用我们的模型转换你的视频。
+
 
 <br>
 
 ## 下载
 
-推荐在通常情况下使用 MobileNetV3 的模型。ResNet50 的模型大很多，效果稍有提高。我们的模型支持很多框架。详情请阅读[推断文档](documentation/inference_zh_Hans.md)。
+ResNet50 的模型
 
 <table>
     <thead>
