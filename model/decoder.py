@@ -1,10 +1,10 @@
-import torch
-from torch import Tensor
-from torch import nn
-from torch.nn import functional as F
+import paddle
+from paddle import nn
+from paddle import Tensor
+from paddle.nn import functional as F
 from typing import Tuple, Optional
 
-class RecurrentDecoder(nn.Module):
+class RecurrentDecoder(nn.Layer):
     def __init__(self, feature_channels, decoder_channels):
         super().__init__()
         self.avgpool = AvgPool()
@@ -24,13 +24,14 @@ class RecurrentDecoder(nn.Module):
         x2, r2 = self.decode2(x3, f2, s2, r2)
         x1, r1 = self.decode1(x2, f1, s1, r1)
         x0 = self.decode0(x1, s0)
+        # print("x0, r1, r2, r3, r4", x0.shape, r1.shape,r2.shape,r3.shape, r4.shape)
         return x0, r1, r2, r3, r4
     
 
-class AvgPool(nn.Module):
+class AvgPool(nn.Layer):
     def __init__(self):
         super().__init__()
-        self.avgpool = nn.AvgPool2d(2, 2, count_include_pad=False, ceil_mode=True)
+        self.avgpool = nn.AvgPool2D(2, 2, exclusive=False, ceil_mode=True)  # count_include_pad exclusive
         
     def forward_single_frame(self, s0):
         s1 = self.avgpool(s0)
@@ -42,9 +43,12 @@ class AvgPool(nn.Module):
         B, T = s0.shape[:2]
         s0 = s0.flatten(0, 1)
         s1, s2, s3 = self.forward_single_frame(s0)
-        s1 = s1.unflatten(0, (B, T))
-        s2 = s2.unflatten(0, (B, T))
-        s3 = s3.unflatten(0, (B, T))
+        # s1 = s1.unflatten(0, (B, T))
+        # s2 = s2.unflatten(0, (B, T))
+        # s3 = s3.unflatten(0, (B, T))
+        s1 = s1.reshape([B, T] + s1.shape[1:])
+        s2 = s2.reshape([B, T] + s2.shape[1:])
+        s3 = s3.reshape([B, T] + s3.shape[1:])
         return s1, s2, s3
     
     def forward(self, s0):
@@ -54,39 +58,46 @@ class AvgPool(nn.Module):
             return self.forward_single_frame(s0)
 
 
-class BottleneckBlock(nn.Module):
+class BottleneckBlock(nn.Layer):
     def __init__(self, channels):
         super().__init__()
         self.channels = channels
         self.gru = ConvGRU(channels // 2)
         
     def forward(self, x, r: Optional[Tensor]):
-        a, b = x.split(self.channels // 2, dim=-3)
+        # print("a, b = x.split(self.channels // 2, axis=-3)", self.channels // 2)
+        a = []
+        # a, b = x.split(self.channels // 2, axis=-3) # dim
+        a, b = x.split(2, axis=-3) 
+        # print(len(a))
         b, r = self.gru(b, r)
-        x = torch.cat([a, b], dim=-3)
+        x = paddle.concat([a, b], axis=-3) # cat concat
         return x, r
 
     
-class UpsamplingBlock(nn.Module):
+class UpsamplingBlock(nn.Layer):
     def __init__(self, in_channels, skip_channels, src_channels, out_channels):
         super().__init__()
         self.out_channels = out_channels
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels + skip_channels + src_channels, out_channels, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(True),
+            nn.Conv2D(in_channels + skip_channels + src_channels, out_channels, 3, 1, 1, bias_attr=False),
+            nn.BatchNorm2D(out_channels),
+            nn.ReLU(),
         )
         self.gru = ConvGRU(out_channels // 2)
 
     def forward_single_frame(self, x, f, s, r: Optional[Tensor]):
         x = self.upsample(x)
-        x = x[:, :, :s.size(2), :s.size(3)]
-        x = torch.cat([x, f, s], dim=1)
+        x = x[:, :, :s.shape[2], :s.shape[3]]
+        x = paddle.concat([x, f, s], axis=1) #torch.cat paddle.concat dim - axis
+
         x = self.conv(x)
-        a, b = x.split(self.out_channels // 2, dim=1)
+        # a, b = x.split(self.out_channels // 2, axis=1)
+        a, b = x.split(2, axis=1)
+        
         b, r = self.gru(b, r)
-        x = torch.cat([a, b], dim=1)
+        x = paddle.concat([a, b], axis=1)
         return x, r
     
     def forward_time_series(self, x, f, s, r: Optional[Tensor]):
@@ -96,12 +107,15 @@ class UpsamplingBlock(nn.Module):
         s = s.flatten(0, 1)
         x = self.upsample(x)
         x = x[:, :, :H, :W]
-        x = torch.cat([x, f, s], dim=1)
+        x = paddle.concat([x, f, s], axis=1)
         x = self.conv(x)
-        x = x.unflatten(0, (B, T))
-        a, b = x.split(self.out_channels // 2, dim=2)
+        # x = x.unflatten(0, (B, T))
+        x = x.reshape([B, T] + x.shape[1:])
+
+        # a, b = x.split(self.out_channels // 2, axis=2)
+        a, b = x.split(2, axis=2)
         b, r = self.gru(b, r)
-        x = torch.cat([a, b], dim=2)
+        x = paddle.concat([a, b], axis=2)
         return x, r
     
     def forward(self, x, f, s, r: Optional[Tensor]):
@@ -111,23 +125,23 @@ class UpsamplingBlock(nn.Module):
             return self.forward_single_frame(x, f, s, r)
 
 
-class OutputBlock(nn.Module):
+class OutputBlock(nn.Layer):
     def __init__(self, in_channels, src_channels, out_channels):
         super().__init__()
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels + src_channels, out_channels, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(True),
-            nn.Conv2d(out_channels, out_channels, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(True),
+            nn.Conv2D(in_channels + src_channels, out_channels, 3, 1, 1, bias_attr=False),
+            nn.BatchNorm2D(out_channels),
+            nn.ReLU(),
+            nn.Conv2D(out_channels, out_channels, 3, 1, 1, bias_attr=False),
+            nn.BatchNorm2D(out_channels),
+            nn.ReLU(),
         )
         
     def forward_single_frame(self, x, s):
         x = self.upsample(x)
-        x = x[:, :, :s.size(2), :s.size(3)]
-        x = torch.cat([x, s], dim=1)
+        x = x[:, :, :s.shape[2], :s.shape[3]]
+        x = paddle.concat([x, s], axis=1)
         x = self.conv(x)
         return x
     
@@ -137,9 +151,10 @@ class OutputBlock(nn.Module):
         s = s.flatten(0, 1)
         x = self.upsample(x)
         x = x[:, :, :H, :W]
-        x = torch.cat([x, s], dim=1)
+        x = paddle.concat([x, s], axis=1)
         x = self.conv(x)
-        x = x.unflatten(0, (B, T))
+        # x = x.unflatten(0, (B, T))
+        x = x.reshape([B, T] + x.shape[1:])
         return x
     
     def forward(self, x, s):
@@ -149,7 +164,7 @@ class OutputBlock(nn.Module):
             return self.forward_single_frame(x, s)
 
 
-class ConvGRU(nn.Module):
+class ConvGRU(nn.Layer):
     def __init__(self,
                  channels: int,
                  kernel_size: int = 3,
@@ -157,32 +172,36 @@ class ConvGRU(nn.Module):
         super().__init__()
         self.channels = channels
         self.ih = nn.Sequential(
-            nn.Conv2d(channels * 2, channels * 2, kernel_size, padding=padding),
+            nn.Conv2D(channels * 2, channels * 2, kernel_size, padding=padding),
             nn.Sigmoid()
         )
         self.hh = nn.Sequential(
-            nn.Conv2d(channels * 2, channels, kernel_size, padding=padding),
+            nn.Conv2D(channels * 2, channels, kernel_size, padding=padding),
             nn.Tanh()
         )
         
     def forward_single_frame(self, x, h):
-        r, z = self.ih(torch.cat([x, h], dim=1)).split(self.channels, dim=1)
-        c = self.hh(torch.cat([x, r * h], dim=1))
+        # print("forward_single_frame split(self.channels, axis=1)", self.channels)
+        # r, z = self.ih(paddle.concat([x, h], axis=1)).split(self.channels, axis=1)
+        r, z = self.ih(paddle.concat([x, h], axis=1)).split(2, axis=1)
+        
+        # print(r,z)
+        c = self.hh(paddle.concat([x, r * h], axis=1))
         h = (1 - z) * h + z * c
         return h, h
     
     def forward_time_series(self, x, h):
         o = []
-        for xt in x.unbind(dim=1):
+        for xt in x.unbind(axis=1): # dim to axis
             ot, h = self.forward_single_frame(xt, h)
             o.append(ot)
-        o = torch.stack(o, dim=1)
+        o = paddle.stack(o, axis=1) # torch.stack dim-axis
         return o, h
         
     def forward(self, x, h: Optional[Tensor]):
         if h is None:
-            h = torch.zeros((x.size(0), x.size(-3), x.size(-2), x.size(-1)),
-                            device=x.device, dtype=x.dtype)
+            h = paddle.zeros((x.shape[0], x.shape[-3], x.shape[-2], x.shape[-1]),
+                             dtype=x.dtype)
         
         if x.ndim == 5:
             return self.forward_time_series(x, h)
@@ -190,17 +209,19 @@ class ConvGRU(nn.Module):
             return self.forward_single_frame(x, h)
 
 
-class Projection(nn.Module):
+class Projection(nn.Layer):
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, 1)
+        self.conv = nn.Conv2D(in_channels, out_channels, 1)
     
     def forward_single_frame(self, x):
         return self.conv(x)
     
     def forward_time_series(self, x):
         B, T = x.shape[:2]
-        return self.conv(x.flatten(0, 1)).unflatten(0, (B, T))
+        # return self.conv(x.flatten(0, 1)).unflatten(0, (B, T))
+        x = self.conv(x.flatten(0, 1))
+        return x.reshape([B, T] + x.shape[1:])
         
     def forward(self, x):
         if x.ndim == 5:
@@ -208,3 +229,20 @@ class Projection(nn.Module):
         else:
             return self.forward_single_frame(x)
     
+if __name__ == "__main__":
+
+    # 需要看看RecuRecurrentDecoder的输入信息，以便验证
+    # RecurrentDecoder([64, 256, 512, 256], [128, 64, 32, 16])
+
+    s0 = paddle.randn([2, 2, 3, 224, 224])
+    f1=paddle.randn([2, 2, 64, 112, 112])
+    f2=paddle.randn([2, 2, 256, 56, 56])
+    f3=paddle.randn([2, 2, 512, 28, 28])
+    f4=paddle.randn([2, 2, 256, 14, 14])
+    r1=r2=r3=r4=None
+
+    testmodel = RecurrentDecoder([64, 256, 512, 256], [128, 64, 32, 16])
+    tmp = testmodel(s0, f1, f2, f3, f4, r1, r2, r3, r4)
+    print(f"输入8个数据 其中S0的shape:{s0.shape} 输出数据长度:{len(tmp)}")
+    for i in tmp:
+        print(i.shape)
