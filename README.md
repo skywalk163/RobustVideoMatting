@@ -102,5 +102,10 @@ convert_video(
 )
 ```
 
+没有算力也没关系，上这里[拍电影没有绿幕，AI给我们造！AIStudio项目地址](https://aistudio.baidu.com/aistudio/projectdetail/3513358)
+
+读万卷书，不如行万里路！大家动手进项目亲自实践检验一下吧！
+
+
 项目还在继续中....
 
