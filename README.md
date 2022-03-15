@@ -9,6 +9,7 @@
 <br>
 
 ## 更新
+* [2022.3.12日] 新增加了mobilenetv3骨干网络支持。
 * [2022.2.26日] 新加了飞桨PaddlePaddle代码实现。暂时只复现了ResNet50的推理部分。
 * [2021年11月3日] 修复了 [train.py](https://github.com/PeterL1n/RobustVideoMatting/commit/48effc91576a9e0e7a8519f3da687c0d3522045f) 的 bug。
 * [2021年9月16日] 代码重新以 GPL-3.0 许可发布。
@@ -37,30 +38,25 @@
 <br>
 
 ## 下载
+ResNet50 和mobilenetv3的模型 。
 
-ResNet50 的模型
 
-<table>
-    <thead>
-        <tr>
-            <td>框架</td>
-            <td>下载</td>
-            <td>备注</td>
-        </tr>
-    </thead>
-    <tbody>
-        <tr>
-            <td>飞桨rvm_resnet50.pdparams</td>
-            <td>
-                链接: https://pan.baidu.com/s/1wfWuqA04gnPiJ4EXF4FpWw 提取码: fs1e </a>
-            </td>
-            <td>
-                
-            </td>
-        </tr>
+<table border="1">
+  <tr>
+    <th>框架</th>
+    <th>下载</th>
+  </tr>
+  <tr>
+    <td>飞桨rvm_resnet50.pdparams</td>
+    <td>链接: https://pan.baidu.com/s/1wfWuqA04gnPiJ4EXF4FpWw 提取码: fs1e</td>
+  </tr>
+    <tr>
+    <td>飞桨rvm_mobilenetv3.pdparams</td>
+    <td>链接: https://pan.baidu.com/s/1O-Z8BnpypOz5uQn39n_GDw 提取码: q3af</td>
+  </tr>
+  
 
 </table>
-
 
 <br>
 
