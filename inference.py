@@ -152,7 +152,8 @@ def convert_video(model,
                     if output_type == 'video':
                         com = fgr * pha + bgr * (1 - pha)
                     else:
-                        fgr = fgr * pha.gt(0)
+#                         fgr = fgr * pha.gt(0)
+                        fgr = fgr * pha.greater_than(paddle.to_tensor(0.))
                         # com = storch.cat([fgr, pha], dim=-3)
                         com = paddle.concat([fgr, pha], axis=-3)
                     writer_com.write(com[0])
